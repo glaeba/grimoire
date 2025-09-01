@@ -1,15 +1,143 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
+datasource db {
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
 }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+generator client {
+  provider = "prisma-client-js" 
+}
+
+// --- Glaeba Grimoire Data Models ---
+
+// User Model (for NextAuth.js & our app)
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  plan Plan @default(FREE)
+
+  storageUsedBytes BigInt @default(0)
+  dailyChatCount   Int    @default(0)
+
+  subjects Subject[]
+  accounts Account[]
+  sessions Session[]
+}
+
+// Subject Model
+model Subject {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  name        String
+  description String?
+  persona     String?
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources     Source[]
+  chats       Chat[]
+
+  @@index([userId])
+}
+
+// Source Material Model
+model Source {
+  id        String     @id @default(cuid())
+  createdAt DateTime   @default(now())
+  fileName  String
+  fileType  SourceType
+  fileSize  BigInt
+  storageId String     @unique
+  subjectId String
+  subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@index([subjectId])
+}
+
+// Chat Session Model
+model Chat {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  title     String
+  subjectId String
+  subject   Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  @@index([subjectId])
+}
+
+// Message Model
+model Message {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  content     String   @db.Text
+  role        Role
+  sourcesJson String?  @db.Text
+  chatId      String
+  chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+}
+
+
+// --- NextAuth.js Adapter Models ---
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+
+// --- ENUM Types ---
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum SourceType {
+  PDF
+  IMAGE
+  TXT
+  URL
+}
+
+enum Role {
+  USER
+  AI
 }
